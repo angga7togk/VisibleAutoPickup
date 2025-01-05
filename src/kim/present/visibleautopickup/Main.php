@@ -27,7 +27,7 @@ declare(strict_types=1);
 
 namespace kim\present\visibleautopickup;
 
-use kim\present\removeplugindatafolder\PluginDataFolderEraser;
+use onebone\economyland\EconomyLand;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDeathEvent;
@@ -39,19 +39,29 @@ use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
 use pocketmine\world\World;
 
-final class Main extends PluginBase implements Listener{
+final class Main extends PluginBase implements Listener
+{
 
-    protected function onEnable() : void{
-        PluginDataFolderEraser::erase($this);
-
+    private bool $economyLandIsEnabled = false;
+    protected function onEnable(): void
+    {
+        if ($this->getServer()->getPluginManager()->getPlugin("EconomyLand") !== null) {
+            $this->economyLandIsEnabled = true;
+        }
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
     }
 
-    /** @priority HIGHEST */
-    public function onBlockBreakEvent(BlockBreakEvent $event) : void{
+    /** @priority LOWEST */
+    public function onBlockBreakEvent(BlockBreakEvent $event): void
+    {
         $player = $event->getPlayer();
-        if(!$player->hasFiniteResources()){
+        if (!$player->hasFiniteResources()) {
             return;
+        }
+        if($this->economyLandIsEnabled) {
+            if(!EconomyLand::getInstance()->canTouch($event->getBlock()->getPosition(), $player)){
+                return;
+            }
         }
 
         $world = $player->getWorld();
@@ -64,16 +74,17 @@ final class Main extends PluginBase implements Listener{
         $event->setXpDropAmount(0);
     }
 
-    /** @priority HIGHEST */
-    public function onEntityDeathEvent(EntityDeathEvent $event) : void{
+    /** @priority LOWEST */
+    public function onEntityDeathEvent(EntityDeathEvent $event): void
+    {
         $entity = $event->getEntity();
         $lastDamageEvent = $entity->getLastDamageCause();
-        if(!($lastDamageEvent instanceof EntityDamageByEntityEvent)){
+        if (!($lastDamageEvent instanceof EntityDamageByEntityEvent)) {
             return;
         }
 
         $player = $lastDamageEvent->getDamager();
-        if(!($player instanceof Player)){
+        if (!($player instanceof Player)) {
             return;
         }
 
@@ -88,16 +99,17 @@ final class Main extends PluginBase implements Listener{
     }
 
     /** @param Item[] $items */
-    private function dropItems(Player $owner, World $world, Vector3 $dropVec, array $items) : void{
-        foreach($items as $dropItem){
+    private function dropItems(Player $owner, World $world, Vector3 $dropVec, array $items): void
+    {
+        foreach ($items as $dropItem) {
             $itemEntity = $world->dropItem($dropVec, $dropItem, null, 20);
-            if($itemEntity === null){
+            if ($itemEntity === null) {
                 continue;
             }
 
             $this->getScheduler()->scheduleDelayedTask(new ClosureTask(
-                function() use ($owner, $itemEntity) : void{
-                    if($itemEntity->isClosed() || $owner->isClosed()){
+                function () use ($owner, $itemEntity): void {
+                    if ($itemEntity->isClosed() || $owner->isClosed()) {
                         return;
                     }
 
@@ -108,12 +120,13 @@ final class Main extends PluginBase implements Listener{
         }
     }
 
-    private function dropXpOrbs(Player $owner, World $world, Vector3 $dropVec, int $xp) : void{
-        foreach($world->dropExperience($dropVec, $xp) as $xpEntity){
+    private function dropXpOrbs(Player $owner, World $world, Vector3 $dropVec, int $xp): void
+    {
+        foreach ($world->dropExperience($dropVec, $xp) as $xpEntity) {
             $xpEntity->setTargetPlayer($owner);
             $this->getScheduler()->scheduleDelayedTask(new ClosureTask(
-                function() use ($owner, $xpEntity) : void{
-                    if($xpEntity->isClosed()){
+                function () use ($owner, $xpEntity): void {
+                    if ($xpEntity->isClosed()) {
                         return;
                     }
 
